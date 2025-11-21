@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 
-const API_URL = 'https://e9c3e1f66f9b.ngrok-free.app';
+// Use localhost for local development. 
+// Change this back to your ngrok URL if testing on a real device/mobile.
+const API_URL = 'http://localhost:3000';
 
 const api = axios.create({
     baseURL: API_URL,
@@ -42,6 +44,14 @@ export const wallet = {
     },
     getActivity: async (): Promise<Transaction[]> => {
         const response = await api.get('/wallet/activity');
+        
+        // Safety Check: Ensure response is an array
+        // This prevents crashes if the server returns HTML (e.g., 404 page, ngrok error)
+        if (!Array.isArray(response.data)) {
+            console.error("Invalid API Response:", response.data);
+            return [];
+        }
+
         // Map backend transaction format to frontend interface
         return response.data.map((tx: any) => ({
             id: tx.id.toString(),

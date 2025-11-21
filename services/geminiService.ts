@@ -3,8 +3,8 @@ import { SYSTEM_INSTRUCTION } from "../constants";
 
 let chatSession: Chat | null = null;
 
-// Initialize the API client
-const ai = new GoogleGenAI({ apiKey: "AIzaSyAdd6QFl0GudddP6kLIbhNU1w71ZhvQYmI"});
+// Initialize the API client using the environment variable
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getChatSession = (): Chat => {
   if (!chatSession) {
