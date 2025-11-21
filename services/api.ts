@@ -1,12 +1,13 @@
 import axios from 'axios';
 import { Transaction, TransactionType, PaymentStatus } from '../types';
 
-const API_URL = 'https://552187e9420e.ngrok-free.app';
+const API_URL = 'https://e9c3e1f66f9b.ngrok-free.app';
 
 const api = axios.create({
     baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': 'true'
     },
 });
 

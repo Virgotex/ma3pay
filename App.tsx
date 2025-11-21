@@ -71,6 +71,30 @@ export default function App() {
   // Enrollment State
   const [enrollStatus, setEnrollStatus] = useState<'idle' | 'scanning' | 'success'>('idle');
 
+  // Session Persistence: Check for stored user on mount
+  useEffect(() => {
+    const storedUser = localStorage.getItem('ma3pay_user');
+    const storedToken = localStorage.getItem('ma3pay_token');
+    
+    if (storedUser && storedToken) {
+        try {
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+            setView(View.HOME);
+        } catch (e) {
+            console.error("Failed to load stored session", e);
+            localStorage.removeItem('ma3pay_user');
+        }
+    }
+  }, []);
+
+  // Update stored user whenever user state changes
+  useEffect(() => {
+    if (user) {
+        localStorage.setItem('ma3pay_user', JSON.stringify(user));
+    }
+  }, [user]);
+
   // Fetch latest data from backend
   const refreshData = useCallback(async () => {
     if (!user) return;
@@ -79,7 +103,8 @@ export default function App() {
         setHistory(txs);
         // Note: Since the backend snippet doesn't have a dedicated "get profile" endpoint 
         // to fetch the exact current balance, we rely on optimistic local updates 
-        // for the balance in the UI.
+        // for the balance in the UI during the session, and the /auth/login response 
+        // for the initial balance source of truth.
     } catch (e) {
         console.error("Failed to fetch history", e);
     }
@@ -127,6 +152,7 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('ma3pay_token');
+    localStorage.removeItem('ma3pay_user'); // Clear persisted session
     setUser(null);
     setView(View.AUTH);
   };
@@ -140,8 +166,35 @@ export default function App() {
     }
   };
 
-  const handleEnrollScan = () => {
+  const handleEnrollScan = async () => {
     setEnrollStatus('scanning');
+
+    // Try Real NFC (Chrome Android)
+    if ('NDEFReader' in window) {
+        try {
+            const ndef = new (window as any).NDEFReader();
+            await ndef.scan();
+            
+            // Set up one-time listener
+            ndef.onreading = (event: any) => {
+                const serialNumber = event.serialNumber; // e.g., "04:a3:..."
+                if (user && serialNumber) {
+                    setUser({...user, nfcTagId: serialNumber});
+                    setEnrollStatus('success');
+                    setTimeout(() => {
+                        setView(View.HOME);
+                        setEnrollStatus('idle');
+                    }, 2000);
+                }
+            };
+            return; // Wait for real tag
+        } catch (error) {
+            console.log("NFC Not enabled or permission denied, falling back to sim", error);
+            // Proceed to simulation below
+        }
+    }
+
+    // Fallback Simulation
     setTimeout(() => {
       const newTagId = MOCK_NFC_IDS[Math.floor(Math.random() * MOCK_NFC_IDS.length)];
       if (user) {
@@ -185,8 +238,32 @@ export default function App() {
   }
 
   // Payment Authorization Scan (NFC)
-  const handlePaymentAuthScan = () => {
+  const handlePaymentAuthScan = async () => {
     setScanStatus('scanning');
+
+    // Try Real NFC
+    if ('NDEFReader' in window) {
+        try {
+            const ndef = new (window as any).NDEFReader();
+            await ndef.scan();
+            
+            ndef.onreading = (event: any) => {
+                const scannedTag = event.serialNumber;
+                
+                // Verify against enrolled tag
+                if (scannedTag === user?.nfcTagId) {
+                    handleRedeemToken();
+                } else {
+                    setScanStatus('error');
+                }
+            };
+            return; // Wait for real tag
+        } catch (error) {
+            console.log("NFC Error, falling back to sim", error);
+        }
+    }
+
+    // Fallback Simulation
     setTimeout(() => {
         // 80% chance of matching the correct user tag for demo purposes
         const scannedTag = Math.random() > 0.2 ? user?.nfcTagId : 'WRONG_TAG';
@@ -257,12 +334,13 @@ export default function App() {
                     <div>
                         <h3 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>{t.enrollTag}</h3>
                         <p className="text-gray-500">{t.enrollDesc}</p>
+                        <p className="text-xs text-gray-400 mt-2">Requires Chrome on Android for Real NFC</p>
                     </div>
                     <button 
                         onClick={handleEnrollScan}
                         className="bg-yellow-500 text-black px-8 py-4 rounded-xl font-bold shadow-lg hover:bg-yellow-400 transition-all w-full max-w-xs"
                     >
-                        Simulate Scan
+                        Scan NFC Tag
                     </button>
                 </>
             )}
@@ -271,6 +349,7 @@ export default function App() {
                  <div className="text-center">
                     <div className="w-24 h-24 border-4 border-yellow-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                     <p className={`text-lg font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Scanning Tag...</p>
+                    <p className="text-sm text-gray-500 mt-2">Tap your NFC card on the back of your phone</p>
                 </div>
             )}
 
@@ -313,7 +392,7 @@ export default function App() {
         <div className="flex justify-between items-start mb-8 relative z-10">
             <div>
                 <p className="text-gray-400 text-xs uppercase tracking-wider mb-1">{t.balance}</p>
-                <h2 className="text-4xl font-bold">KES {user.balance}</h2>
+                <h2 className="text-4xl font-bold">KES {Number(user.balance).toFixed(2)}</h2>
             </div>
             <div className="flex flex-col items-end">
                  <Wifi className={`rotate-90 mb-1 ${user.nfcTagId ? 'text-green-400' : 'text-gray-600'}`} />
@@ -607,7 +686,7 @@ export default function App() {
                                 className="w-full max-w-xs bg-green-600 text-white font-bold py-4 rounded-xl hover:bg-green-700 transition-all shadow-lg shadow-green-600/20 flex items-center justify-center gap-2"
                             >
                                 <Shield size={20} />
-                                Simulate Tag Tap
+                                Scan NFC Tag
                             </button>
                         </>
                     )}

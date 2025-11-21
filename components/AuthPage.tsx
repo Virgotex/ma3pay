@@ -31,14 +31,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, isDark, lang }) => 
             
             localStorage.setItem('ma3pay_token', data.token);
             
-            // Construct user profile from response
+            // Construct user profile from response with explicit number parsing
             const userProfile: UserProfile = {
                 name: data.user.name,
                 phoneNumber: phone,
-                balance: data.user.balance,
-                nfcTagId: null // We will fetch/simulate this later as backend doesn't return it in login
+                balance: Number(data.user.balance), // Explicitly cast to Number
+                nfcTagId: null
             };
             
+            console.log("User Logged In:", userProfile);
             onLogin(userProfile);
         } else {
             // Real Signup
@@ -51,15 +52,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLogin, isDark, lang }) => 
                  const userProfile: UserProfile = {
                     name: name,
                     phoneNumber: phone,
-                    balance: 0,
+                    balance: Number(loginRes.user.balance) || 0, // Use backend balance
                     nfcTagId: null
                 };
+                console.log("User Registered:", userProfile);
                 onLogin(userProfile);
             }
         }
     } catch (err: any) {
         console.error(err);
-        setError(err.response?.data?.error || "Authentication failed. Please check your connection.");
+        setError(err.response?.data?.error || "Authentication failed. Please check your credentials.");
     } finally {
         setLoading(false);
     }
